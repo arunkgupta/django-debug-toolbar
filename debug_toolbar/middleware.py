@@ -4,19 +4,16 @@ Debug Toolbar middleware
 
 from __future__ import absolute_import, unicode_literals
 
-try:
-    from importlib import import_module
-except ImportError:  # python 2.6
-    from django.utils.importlib import import_module
 import re
 import threading
 
 from django.conf import settings
-from django.utils.encoding import force_text
 from django.utils import six
+from django.utils.encoding import force_text
+from django.utils.module_loading import import_string
 
-from debug_toolbar.toolbar import DebugToolbar
 from debug_toolbar import settings as dt_settings
+from debug_toolbar.toolbar import DebugToolbar
 
 _HTML_TYPES = ('text/html', 'application/xhtml+xml')
 # Handles python threading module bug - http://bugs.python.org/issue14308
@@ -48,9 +45,7 @@ class DebugToolbarMiddleware(object):
         # setup, resolve it to the corresponding callable.
         func_or_path = dt_settings.CONFIG['SHOW_TOOLBAR_CALLBACK']
         if isinstance(func_or_path, six.string_types):
-            # Replace this with import_by_path in Django >= 1.6.
-            mod_path, func_name = func_or_path.rsplit('.', 1)
-            self.show_toolbar = getattr(import_module(mod_path), func_name)
+            self.show_toolbar = import_string(func_or_path)
         else:
             self.show_toolbar = func_or_path
 
@@ -129,6 +124,10 @@ class DebugToolbarMiddleware(object):
             # When the body ends with a newline, there's two trailing groups.
             bits.append(''.join(m[0] for m in matches if m[1] == ''))
         if len(bits) > 1:
+            # When the toolbar will be inserted for sure, generate the stats.
+            for panel in reversed(toolbar.enabled_panels):
+                panel.generate_stats(request, response)
+
             bits[-2] += toolbar.render_toolbar()
             response.content = insert_before.join(bits)
             if response.get('Content-Length', None):

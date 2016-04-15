@@ -2,7 +2,6 @@
 
 from __future__ import absolute_import, unicode_literals
 
-import django
 from django.contrib.auth.models import User
 from django.template import Context, RequestContext, Template
 
@@ -37,8 +36,7 @@ class TemplatesPanelTestCase(BaseTestCase):
         # ensure the query was NOT logged
         self.assertEqual(len(self.sql_panel._queries), 0)
 
-        base_ctx_idx = 1 if django.VERSION[:2] >= (1, 5) else 0
-        ctx = self.panel.templates[0]['context'][base_ctx_idx]
+        ctx = self.panel.templates[0]['context'][1]
         self.assertIn('<<queryset of auth.User>>', ctx)
         self.assertIn('<<triggers database query>>', ctx)
 
@@ -48,6 +46,22 @@ class TemplatesPanelTestCase(BaseTestCase):
         c = Context({'object': NonAsciiRepr()})
         t.render(c)
         self.panel.process_response(self.request, self.response)
+        self.panel.generate_stats(self.request, self.response)
+        self.assertIn('nôt åscíì', self.panel.content)
+
+    def test_insert_content(self):
+        """
+        Test that the panel only inserts content after generate_stats and
+        not the process_response.
+        """
+        t = Template("{{ object }}")
+        c = Context({'object': NonAsciiRepr()})
+        t.render(c)
+        self.panel.process_response(self.request, self.response)
+        # ensure the panel does not have content yet.
+        self.assertNotIn('nôt åscíì', self.panel.content)
+        self.panel.generate_stats(self.request, self.response)
+        # ensure the panel renders correctly.
         self.assertIn('nôt åscíì', self.panel.content)
 
     def test_custom_context_processor(self):
@@ -56,7 +70,17 @@ class TemplatesPanelTestCase(BaseTestCase):
         c = RequestContext(self.request, processors=[context_processor])
         t.render(c)
         self.panel.process_response(self.request, self.response)
+        self.panel.generate_stats(self.request, self.response)
         self.assertIn('tests.panels.test_template.context_processor', self.panel.content)
+
+    def test_disabled(self):
+        config = {
+            'DISABLE_PANELS': set([
+                'debug_toolbar.panels.templates.TemplatesPanel'])
+        }
+        self.assertTrue(self.panel.enabled)
+        with self.settings(DEBUG_TOOLBAR_CONFIG=config):
+            self.assertFalse(self.panel.enabled)
 
 
 def context_processor(request):

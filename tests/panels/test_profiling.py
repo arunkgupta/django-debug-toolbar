@@ -4,7 +4,6 @@ from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.test.utils import override_settings
-from django.utils import unittest
 
 from ..base import BaseTestCase
 from ..views import regular_view
@@ -17,13 +16,24 @@ class ProfilingPanelTestCase(BaseTestCase):
         super(ProfilingPanelTestCase, self).setUp()
         self.panel = self.toolbar.get_panel_by_id('ProfilingPanel')
 
-    # This test fails randomly for a reason I don't understand.
-
-    @unittest.expectedFailure
     def test_regular_view(self):
         self.panel.process_view(self.request, regular_view, ('profiling',), {})
         self.panel.process_response(self.request, self.response)
+        self.panel.generate_stats(self.request, self.response)
         self.assertIn('func_list', self.panel.get_stats())
+        self.assertIn('regular_view', self.panel.content)
+
+    def test_insert_content(self):
+        """
+        Test that the panel only inserts content after generate_stats and
+        not the process_response.
+        """
+        self.panel.process_view(self.request, regular_view, ('profiling',), {})
+        self.panel.process_response(self.request, self.response)
+        # ensure the panel does not have content yet.
+        self.assertNotIn('regular_view', self.panel.content)
+        self.panel.generate_stats(self.request, self.response)
+        # ensure the panel renders correctly.
         self.assertIn('regular_view', self.panel.content)
 
 
@@ -39,9 +49,6 @@ class ProfilingPanelIntegrationTestCase(TestCase):
         self.assertEqual(User.objects.count(), 1)
 
         with self.assertRaises(IntegrityError):
-            if hasattr(transaction, 'atomic'):      # Django >= 1.6
-                with transaction.atomic():
-                    response = self.client.get('/new_user/')
-            else:
+            with transaction.atomic():
                 response = self.client.get('/new_user/')
         self.assertEqual(User.objects.count(), 1)

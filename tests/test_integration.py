@@ -3,7 +3,17 @@
 from __future__ import absolute_import, unicode_literals
 
 import os
+import unittest
 from xml.etree import ElementTree as ET
+
+from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.test import RequestFactory, TestCase
+from django.test.utils import override_settings
+
+from debug_toolbar.middleware import DebugToolbarMiddleware, show_toolbar
+
+from .base import BaseTestCase
+from .views import regular_view
 
 try:
     from selenium import webdriver
@@ -11,21 +21,6 @@ try:
     from selenium.webdriver.support.wait import WebDriverWait
 except ImportError:
     webdriver = None
-
-try:
-    from django.contrib.staticfiles.testing import StaticLiveServerTestCase \
-        as LiveServerTestCase
-except ImportError:
-    # When we're using < Django 1.7
-    from django.test import LiveServerTestCase
-from django.test import RequestFactory, TestCase
-from django.test.utils import override_settings
-from django.utils.unittest import skipIf, skipUnless
-
-from debug_toolbar.middleware import DebugToolbarMiddleware, show_toolbar
-
-from .base import BaseTestCase
-from .views import regular_view
 
 
 rf = RequestFactory()
@@ -51,6 +46,7 @@ class DebugToolbarTestCase(BaseTestCase):
         panel = self.toolbar.get_panel_by_id('RequestPanel')
         panel.process_request(self.request)
         panel.process_response(self.request, self.response)
+        panel.generate_stats(self.request, self.response)
         return panel.get_stats()
 
     def test_url_resolving_positional(self):
@@ -92,6 +88,14 @@ class DebugToolbarTestCase(BaseTestCase):
         # check toolbar insertion before "</body>"
         self.assertContains(resp, '</div>\n</body>')
 
+    def test_cache_page(self):
+        self.client.get('/cached_view/')
+        self.assertEqual(
+            len(self.toolbar.get_panel_by_id('CachePanel').calls), 3)
+        self.client.get('/cached_view/')
+        self.assertEqual(
+            len(self.toolbar.get_panel_by_id('CachePanel').calls), 5)
+
 
 @override_settings(DEBUG=True)
 class DebugToolbarIntegrationTestCase(TestCase):
@@ -115,10 +119,10 @@ class DebugToolbarIntegrationTestCase(TestCase):
         ET.fromstring(response.content)     # shouldn't raise ParseError
 
 
-@skipIf(webdriver is None, "selenium isn't installed")
-@skipUnless('DJANGO_SELENIUM_TESTS' in os.environ, "selenium tests not requested")
+@unittest.skipIf(webdriver is None, "selenium isn't installed")
+@unittest.skipUnless('DJANGO_SELENIUM_TESTS' in os.environ, "selenium tests not requested")
 @override_settings(DEBUG=True)
-class DebugToolbarLiveTestCase(LiveServerTestCase):
+class DebugToolbarLiveTestCase(StaticLiveServerTestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -147,7 +151,7 @@ class DebugToolbarLiveTestCase(LiveServerTestCase):
         self.assertIn("Name", table.text)
         self.assertIn("Version", table.text)
 
-    @override_settings(DEBUG_TOOLBAR_CONFIG={'RESULTS_STORE_SIZE': 0})
+    @override_settings(DEBUG_TOOLBAR_CONFIG={'RESULTS_CACHE_SIZE': 0})
     def test_expired_store(self):
         self.selenium.get(self.live_server_url + '/regular/basic/')
         version_panel = self.selenium.find_element_by_id('VersionsPanel')
@@ -183,4 +187,3 @@ class DebugToolbarLiveTestCase(LiveServerTestCase):
         WebDriverWait(self.selenium, timeout=10).until(
             lambda selenium: self.selenium.find_element_by_css_selector(
                 '#djDebugWindow code'))
-

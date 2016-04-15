@@ -1,14 +1,11 @@
 from __future__ import absolute_import, unicode_literals
 
-try:
-    from importlib import import_module
-except ImportError:  # python 2.6
-    from django.utils.importlib import import_module
 import warnings
+from importlib import import_module
 
 from django.conf import settings
 from django.utils import six
-
+from django.utils.module_loading import import_string
 
 # Always import this module as follows:
 # from debug_toolbar import settings [as dt_settings]
@@ -21,9 +18,9 @@ CONFIG_DEFAULTS = {
     # Toolbar options
     'DISABLE_PANELS': set(['debug_toolbar.panels.redirects.RedirectsPanel']),
     'INSERT_BEFORE': '</body>',
-    'JQUERY_URL': '//ajax.googleapis.com/ajax/libs/jquery/2.1.0/jquery.min.js',
+    'JQUERY_URL': '//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js',
     'RENDER_PANELS': None,
-    'RESULTS_STORE_SIZE': 10,
+    'RESULTS_CACHE_SIZE': 10,
     'ROOT_TAG_EXTRA_ATTRS': '',
     'SHOW_COLLAPSED': False,
     'SHOW_TOOLBAR_CALLBACK': 'debug_toolbar.middleware.show_toolbar',
@@ -178,12 +175,9 @@ def check_middleware():
 
 
 def is_middleware_class(middleware_class, middleware_path):
-    # This could be replaced by import_by_path in Django >= 1.6.
     try:
-        mod_path, cls_name = middleware_path.rsplit('.', 1)
-        mod = import_module(mod_path)
-        middleware_cls = getattr(mod, cls_name)
-    except (AttributeError, ImportError, ValueError):
+        middleware_cls = import_string(middleware_path)
+    except ImportError:
         return
     return issubclass(middleware_cls, middleware_class)
 

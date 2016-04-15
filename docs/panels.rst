@@ -75,7 +75,7 @@ Cache
 
 Path: ``debug_toolbar.panels.cache.CachePanel``
 
-Cache queries.
+Cache queries. Is incompatible with Django's per-site caching.
 
 Signal
 ~~~~~~
@@ -144,6 +144,15 @@ Third-party panels
     report bugs to their authors.
 
 If you'd like to add a panel to this list, please submit a pull request!
+
+Flamegraph
+~~~~~~~~~~
+
+URL: https://github.com/23andMe/djdt-flamegraph
+
+Path: ``djdt_flamegraph.FlamegraphPanel``
+
+Generates a flame graph from your current request.
 
 Haystack
 ~~~~~~~~
@@ -217,6 +226,15 @@ Path: ``neo4j_panel.Neo4jPanel``
 
 Trace neo4j rest API calls in your django application, this also works for neo4django and neo4jrestclient, support for py2neo is on its way.
 
+Pympler
+~~~~~~~
+
+URL: https://pythonhosted.org/Pympler/django.html
+
+Path: ``pympler.panels.MemoryPanel``
+
+Shows process memory information (virtual size, resident set size) and model instances for the current request.
+
 Request History
 ~~~~~~~~~~~~~~~
 
@@ -266,6 +284,15 @@ Path: ``debug_toolbar_user_panel.panels.UserPanel``
 
 Easily switch between logged in users, see properties of current user.
 
+VCS Info
+~~~~~~~~
+
+URL: https://github.com/giginet/django-debug-toolbar-vcs-info
+
+Path: ``vcs_info_panel.panels.GitInfoPanel``
+
+Displays VCS status (revision, branch, latest commit log and more) of your Django application.
+
 API for third-party panels
 --------------------------
 
@@ -273,7 +300,7 @@ Third-party panels must subclass :class:`~debug_toolbar.panels.Panel`,
 according to the public API described below. Unless noted otherwise, all
 methods are optional.
 
-Panels can ship their own templates, static files and views. They're no public
+Panels can ship their own templates, static files and views. There is no public
 CSS API at this time.
 
 .. autoclass:: debug_toolbar.panels.Panel(*args, **kwargs)
@@ -305,6 +332,10 @@ CSS API at this time.
     .. automethod:: debug_toolbar.panels.Panel.process_view
 
     .. automethod:: debug_toolbar.panels.Panel.process_response
+
+    .. automethod:: debug_toolbar.panels.Panel.generate_stats
+
+.. _javascript-api:
 
 JavaScript API
 ~~~~~~~~~~~~~~

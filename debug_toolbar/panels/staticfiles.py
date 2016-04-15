@@ -1,25 +1,23 @@
 from __future__ import absolute_import, unicode_literals
-from os.path import normpath, join
+
+from collections import OrderedDict
+from os.path import join, normpath
+
+from django.conf import settings
+from django.contrib.staticfiles import finders, storage
+from django.contrib.staticfiles.templatetags import staticfiles
+from django.core.files.storage import get_storage_class
+from django.utils.encoding import python_2_unicode_compatible
+from django.utils.functional import LazyObject
+from django.utils.translation import ugettext_lazy as _, ungettext
+
+from debug_toolbar import panels
+from debug_toolbar.utils import ThreadCollector
+
 try:
     import threading
 except ImportError:
     threading = None
-
-from django.conf import settings
-from django.core.files.storage import get_storage_class
-from django.contrib.staticfiles import finders, storage
-from django.contrib.staticfiles.templatetags import staticfiles
-
-from django.utils.encoding import python_2_unicode_compatible
-from django.utils.functional import LazyObject
-from django.utils.translation import ungettext, ugettext_lazy as _
-try:
-    from collections import OrderedDict
-except ImportError:
-    from django.utils.datastructures import SortedDict as OrderedDict
-
-from debug_toolbar import panels
-from debug_toolbar.utils import ThreadCollector
 
 
 @python_2_unicode_compatible
@@ -116,7 +114,7 @@ class StaticFilesPanel(panels.Panel):
     def process_request(self, request):
         collector.clear_collection()
 
-    def process_response(self, request, response):
+    def generate_stats(self, request, response):
         used_paths = collector.get_collection()
         self._paths[threading.currentThread()] = used_paths
 

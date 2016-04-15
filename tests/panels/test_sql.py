@@ -2,12 +2,12 @@
 
 from __future__ import absolute_import, unicode_literals
 
-import django
+import unittest
+
 from django.contrib.auth.models import User
 from django.db import connection
 from django.db.utils import DatabaseError
 from django.shortcuts import render
-from django.utils import unittest
 from django.test.utils import override_settings
 
 from ..base import BaseTestCase
@@ -23,6 +23,14 @@ class SQLPanelTestCase(BaseTestCase):
     def tearDown(self):
         self.panel.disable_instrumentation()
         super(SQLPanelTestCase, self).tearDown()
+
+    def test_disabled(self):
+        config = {
+            'DISABLE_PANELS': set(['debug_toolbar.panels.sql.SQLPanel'])
+        }
+        self.assertTrue(self.panel.enabled)
+        with self.settings(DEBUG_TOOLBAR_CONFIG=config):
+            self.assertFalse(self.panel.enabled)
 
     def test_recording(self):
         self.assertEqual(len(self.panel._queries), 0)
@@ -56,8 +64,22 @@ class SQLPanelTestCase(BaseTestCase):
         self.assertEqual(len(self.panel._queries), 3)
 
         self.panel.process_response(self.request, self.response)
+        self.panel.generate_stats(self.request, self.response)
 
         # ensure the panel renders correctly
+        self.assertIn('café', self.panel.content)
+
+    def test_insert_content(self):
+        """
+        Test that the panel only inserts content after generate_stats and
+        not the process_response.
+        """
+        list(User.objects.filter(username='café'.encode('utf-8')))
+        self.panel.process_response(self.request, self.response)
+        # ensure the panel does not have content yet.
+        self.assertNotIn('café', self.panel.content)
+        self.panel.generate_stats(self.request, self.response)
+        # ensure the panel renders correctly.
         self.assertIn('café', self.panel.content)
 
     @unittest.skipUnless(connection.vendor == 'postgresql',
@@ -88,9 +110,6 @@ class SQLPanelTestCase(BaseTestCase):
         # ensure the stacktrace is empty
         self.assertEqual([], query[1]['stacktrace'])
 
-    @unittest.skipIf(django.VERSION < (1, 5),
-                     "Django 1.4 loads the TEMPLATE_LOADERS before "
-                     "override_settings can modify the settings.")
     @override_settings(DEBUG=True, TEMPLATE_DEBUG=True,
                        TEMPLATE_LOADERS=('tests.loaders.LoaderWithSQL',))
     def test_regression_infinite_recursion(self):
@@ -102,10 +121,9 @@ class SQLPanelTestCase(BaseTestCase):
 
         render(self.request, "basic.html", {})
 
-        # ensure queries were logged
-        # It's more than one because the SQL run in the loader is run every time
-        # the template is rendered which is more than once.
-        self.assertEqual(len(self.panel._queries), 3)
+        # Two queries are logged because the loader runs SQL every time a
+        # template is loaded and basic.html extends base.html.
+        self.assertEqual(len(self.panel._queries), 2)
         query = self.panel._queries[0]
         self.assertEqual(query[0], 'default')
         self.assertTrue('sql' in query[1])

@@ -1,4 +1,4 @@
-{% load i18n %}
+{% load i18n %}{% load cycle from debug_toolbar_compat %}
 
 <h4>{% trans "View information" %}</h4>
 <table>
@@ -24,7 +24,7 @@
 	<h4>{% trans "Cookies" %}</h4>
 	<table>
 		<colgroup>
-			<col style="width:20%"/>
+			<col class="djdt-width-20"/>
 			<col/>
 		</colgroup>
 		<thead>
@@ -50,7 +50,7 @@
 	<h4>{% trans "Session data" %}</h4>
 	<table>
 		<colgroup>
-			<col style="width:20%"/>
+			<col class="djdt-width-20"/>
 			<col/>
 		</colgroup>
 		<thead>
@@ -76,7 +76,7 @@
 	<h4>{% trans "GET data" %}</h4>
 	<table>
 		<colgroup>
-			<col style="width:20%"/>
+			<col class="djdt-width-20"/>
 			<col/>
 		</colgroup>
 		<thead>
@@ -102,9 +102,9 @@
 	<h4>{% trans "POST data" %}</h4>
 	<table>
 		<colgroup>
-			<col style="width:20%"/>
+			<col class="djdt-width-20"/>
 			<col/>
-		</colgr
+		</colgroup>
 			<tr>
 				<th>{% trans "Variable" %}</th>
 				<th>{% trans "Value" %}</th>

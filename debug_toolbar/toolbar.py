@@ -4,22 +4,15 @@ The main DebugToolbar class that loads and renders the Toolbar.
 
 from __future__ import absolute_import, unicode_literals
 
-try:
-    from importlib import import_module
-except ImportError:  # python 2.6
-    from django.utils.importlib import import_module
 import uuid
+from collections import OrderedDict
+from importlib import import_module
 
-import django
-from django.conf import settings
+from django.apps import apps
 from django.conf.urls import url
 from django.core.exceptions import ImproperlyConfigured
 from django.template import TemplateSyntaxError
 from django.template.loader import render_to_string
-try:
-    from collections import OrderedDict
-except ImportError:
-    from django.utils.datastructures import SortedDict as OrderedDict
 
 from debug_toolbar import settings as dt_settings
 
@@ -70,14 +63,7 @@ class DebugToolbar(object):
             context = {'toolbar': self}
             return render_to_string('debug_toolbar/base.html', context)
         except TemplateSyntaxError:
-            if django.VERSION[:2] >= (1, 7):
-                from django.apps import apps
-                staticfiles_installed = apps.is_installed(
-                    'django.contrib.staticfiles')
-            else:
-                staticfiles_installed = ('django.contrib.staticfiles'
-                                         in settings.INSTALLED_APPS)
-            if not staticfiles_installed:
+            if not apps.is_installed('django.contrib.staticfiles'):
                 raise ImproperlyConfigured(
                     "The debug toolbar requires the staticfiles contrib app. "
                     "Add 'django.contrib.staticfiles' to INSTALLED_APPS and "
@@ -92,16 +78,14 @@ class DebugToolbar(object):
     def should_render_panels(self):
         render_panels = self.config['RENDER_PANELS']
         if render_panels is None:
-            # Django 1.4 still supports mod_python :( Fall back to the safe
-            # and inefficient default in that case. Revert when we drop 1.4.
-            render_panels = self.request.META.get('wsgi.multiprocess', True)
+            render_panels = self.request.META['wsgi.multiprocess']
         return render_panels
 
     def store(self):
         self.store_id = uuid.uuid4().hex
         cls = type(self)
         cls._store[self.store_id] = self
-        for _ in range(len(cls._store) - self.config['RESULTS_STORE_SIZE']):
+        for _ in range(len(cls._store) - self.config['RESULTS_CACHE_SIZE']):
             try:
                 # collections.OrderedDict
                 cls._store.popitem(last=False)

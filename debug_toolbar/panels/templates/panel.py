@@ -1,29 +1,27 @@
 from __future__ import absolute_import, unicode_literals
 
-try:
-    from collections import OrderedDict
-except ImportError:
-    from django.utils.datastructures import SortedDict as OrderedDict
+from collections import OrderedDict
+from contextlib import contextmanager
 from os.path import normpath
 from pprint import pformat
 
 import django
 from django import http
-from django.conf import settings
 from django.conf.urls import url
 from django.db.models.query import QuerySet, RawQuerySet
 from django.template import Context, RequestContext, Template
-from django.template.context import get_standard_processors
 from django.test.signals import template_rendered
 from django.test.utils import instrumented_test_render
-from django.utils.encoding import force_text
 from django.utils import six
+from django.utils.encoding import force_text
 from django.utils.translation import ugettext_lazy as _
 
+from debug_toolbar.compat import (
+    get_template_context_processors, get_template_dirs,
+)
 from debug_toolbar.panels import Panel
-from debug_toolbar.panels.sql.tracking import recording, SQLQueryTriggered
+from debug_toolbar.panels.sql.tracking import SQLQueryTriggered, recording
 from debug_toolbar.panels.templates import views
-
 
 # Monkey-patch to enable the template_rendered signal. The receiver returns
 # immediately when the panel is disabled to keep the overhead small.
@@ -39,40 +37,58 @@ if Template._render != instrumented_test_render:
 # Monkey-patch to store items added by template context processors. The
 # overhead is sufficiently small to justify enabling it unconditionally.
 
-def _request_context__init__(
-        self, request, dict_=None, processors=None, current_app=None,
-        use_l10n=None, use_tz=None):
-    Context.__init__(
-        self, dict_, current_app=current_app,
-        use_l10n=use_l10n, use_tz=use_tz)
-    if processors is None:
-        processors = ()
-    else:
-        processors = tuple(processors)
-    self.context_processors = OrderedDict()
-    updates = dict()
-    for processor in get_standard_processors() + processors:
-        name = '%s.%s' % (processor.__module__, processor.__name__)
-        context = processor(request)
-        self.context_processors[name] = context
-        updates.update(context)
-    self.update(updates)
+if django.VERSION[:2] < (1, 8):
 
-RequestContext.__init__ = _request_context__init__
+    def _request_context___init__(
+            self, request, dict_=None, processors=None, current_app=None,
+            use_l10n=None, use_tz=None):
+        Context.__init__(
+            self, dict_, current_app=current_app,
+            use_l10n=use_l10n, use_tz=use_tz)
+        if processors is None:
+            processors = ()
+        else:
+            processors = tuple(processors)
+        self.context_processors = OrderedDict()
+        updates = dict()
+        std_processors = get_template_context_processors()
+        for processor in std_processors + processors:
+            name = '%s.%s' % (processor.__module__, processor.__name__)
+            context = processor(request)
+            self.context_processors[name] = context
+            updates.update(context)
+        self.update(updates)
 
+    RequestContext.__init__ = _request_context___init__
 
-# Monkey-patch versions of Django where Template doesn't store origin.
-# See https://code.djangoproject.com/ticket/16096.
+else:
 
-if django.VERSION[:2] < (1, 7):
+    @contextmanager
+    def _request_context_bind_template(self, template):
+        if self.template is not None:
+            raise RuntimeError("Context is already bound to a template")
 
-    old_template_init = Template.__init__
+        self.template = template
+        # Set context processors according to the template engine's settings.
+        processors = (template.engine.template_context_processors +
+                      self._processors)
+        self.context_processors = OrderedDict()
+        updates = {}
+        for processor in processors:
+            name = '%s.%s' % (processor.__module__, processor.__name__)
+            context = processor(self.request)
+            self.context_processors[name] = context
+            updates.update(context)
+        self.dicts[self._processors_index] = updates
 
-    def new_template_init(self, template_string, origin=None, name='<Unknown Template>'):
-        old_template_init(self, template_string, origin, name)
-        self.origin = origin
+        try:
+            yield
+        finally:
+            self.template = None
+            # Unset context processors.
+            self.dicts[self._processors_index] = {}
 
-    Template.__init__ = new_template_init
+    RequestContext.bind_template = _request_context_bind_template
 
 
 class TemplatesPanel(Panel):
@@ -166,18 +182,16 @@ class TemplatesPanel(Panel):
     def disable_instrumentation(self):
         template_rendered.disconnect(self._store_template_info)
 
-    def process_response(self, request, response):
+    def generate_stats(self, request, response):
         template_context = []
         for template_data in self.templates:
             info = {}
             # Clean up some info about templates
             template = template_data.get('template', None)
-            if not hasattr(template, 'origin'):
-                continue
-            if template.origin and template.origin.name:
+            if hasattr(template, 'origin') and template.origin and template.origin.name:
                 template.origin_name = template.origin.name
             else:
-                template.origin_name = 'No origin'
+                template.origin_name = _('No origin')
             info['template'] = template
             # Clean up context for better readability
             if self.toolbar.config['SHOW_TEMPLATE_CONTEXT']:
@@ -191,8 +205,10 @@ class TemplatesPanel(Panel):
         else:
             context_processors = None
 
+        template_dirs = get_template_dirs()
+
         self.record_stats({
             'templates': template_context,
-            'template_dirs': [normpath(x) for x in settings.TEMPLATE_DIRS],
+            'template_dirs': [normpath(x) for x in template_dirs],
             'context_processors': context_processors,
         })
